@@ -10,7 +10,13 @@ require_once 'db_connect.php';
 
 // ตั้งค่าโฟลเดอร์สำหรับเก็บไฟล์
 $upload_dir = 'uploads/';
-$allowed_types = ['application/pdf', 'image/jpeg', 'image/png'];
+// สร้างโฟลเดอร์อัตโนมัติถ้ายังไม่มี
+if (!file_exists($upload_dir)) {
+    mkdir($upload_dir, 0777, true);
+}
+
+// เพิ่มนามสกุลที่รองรับ (.jfif, .jpg, .jpeg, .png)
+$allowed_types = ['application/pdf', 'image/jpeg', 'image/png', 'image/pjpeg']; // pjpeg บางครั้งใช้กับ jfif
 $max_file_size = 50 * 1024 * 1024; // 50 MB
 
 // ตรวจสอบว่ามีการส่งข้อมูลผ่าน POST method
@@ -20,10 +26,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $type_id = intval($_POST['type_id']);
     $user_id = $_SESSION['user_id'];
     $doc_name = trim($_POST['doc_name']);
-    $po_ref_no = trim($_POST['po_ref_no']);
-    $memo_ref_no = trim($_POST['memo_ref_no']);
-    $po_related_equipment = intval($_POST['po_related_equipment']);
     $upload_time = date('Y-m-d H:i:s'); // เวลาปัจจุบัน
+    $status_id = 1; // กำหนดค่าเริ่มต้น status_id = 1 (เช่น ปกติ/รอตรวจสอบ)
+    $docsize_id = 1; // กำหนดค่าเริ่มต้น docsize_id = 1 (เนื่องจากไม่ได้ส่งมาจากฟอร์ม)
 
     // ข้อมูลไฟล์ที่ถูกอัปโหลด
     $file = $_FILES['document_file'];
@@ -49,7 +54,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         }
 
         if (!in_array($file_type, $allowed_types)) {
-            throw new Exception("Invalid file type: Only PDF, JPG, PNG are allowed.");
+            throw new Exception("Invalid file type: Only PDF, JPG, PNG, JFIF are allowed.");
         }
 
         // สร้างชื่อไฟล์ที่ไม่ซ้ำกัน
@@ -66,19 +71,19 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
         // --- ส่วนที่ 2: บันทึก Metadata ลงในตาราง document ---
         
+        // แก้ไข SQL ให้ตรงกับคอลัมน์: doc_name, type_id, user_id, status_id, docsize_id, doc_scandate
         $stmt_doc = $conn->prepare(
-            "INSERT INTO document (type_id, user_id, doc_name, doc_scan_date, po_related_equipment, memo_ref_no, po_ref_no) 
-             VALUES (?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO document (doc_name, type_id, user_id, status_id, docsize_id, doc_scandate) 
+             VALUES (?, ?, ?, ?, ?, ?)"
         );
         $stmt_doc->bind_param(
-            "iississ", 
+            "siiiis", 
+            $doc_name,
             $type_id, 
-            $user_id, 
-            $doc_name, 
-            $upload_time, 
-            $po_related_equipment, 
-            $memo_ref_no, 
-            $po_ref_no
+            $user_id,
+            $status_id,
+            $docsize_id,
+            $upload_time
         );
         
         if (!$stmt_doc->execute()) {
@@ -90,14 +95,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         // --- ส่วนที่ 3: บันทึกข้อมูลไฟล์ลงในตาราง docfile ---
         
         $stmt_file = $conn->prepare(
-            "INSERT INTO docfile (doc_id, file_path, file_type, upload_at) 
-             VALUES (?, ?, ?, ?)"
+            "INSERT INTO docfile (doc_id, file_path, upload_at) 
+             VALUES (?, ?, ?)"
         );
         $stmt_file->bind_param(
-            "isss", 
+            "iss", 
             $doc_id, 
             $file_path, 
-            $file_type, 
             $upload_time
         );
         
