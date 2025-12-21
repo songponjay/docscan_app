@@ -131,21 +131,85 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 <html lang="th">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ผลการอัปโหลด</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <style>
+        body { background-color: #f8f9fa; }
+        .scan-preview {
+            max-width: 100%;
+            border: 10px solid white;
+            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+            margin-bottom: 20px;
+        }
+        @media print {
+            .no-print { display: none !important; }
+            .scan-preview { border: none; box-shadow: none; max-width: 100%; }
+            body { background-color: white; }
+        }
+    </style>
 </head>
 <body>
-    <h2>ผลการบันทึกเอกสาร</h2>
-    
-    <?php if ($success): ?>
-        <p style="color:green;">✅ บันทึกเอกสารและอัปโหลดไฟล์สำเร็จแล้ว!</p>
-        <p>คุณสามารถตรวจสอบไฟล์ได้ที่: <?php echo htmlspecialchars($file_path); ?></p>
-        <p>เลขที่เอกสาร (Doc ID): <?php echo $doc_id; ?></p>
-    <?php else: ?>
-        <p style="color:red;">❌ การบันทึกเอกสารล้มเหลว:</p>
-        <p><?php echo htmlspecialchars($error_msg); ?></p>
-    <?php endif; ?>
-    
-    <p style="margin-top: 20px;"><a href="scan_form.php">อัปโหลดเอกสารอีกครั้ง</a></p>
-    <p><a href="dashboard.php">กลับสู่หน้าหลัก</a></p>
+    <div class="container mt-5">
+        <div class="card shadow-sm">
+            <div class="card-header <?php echo $success ? 'bg-success' : 'bg-danger'; ?> text-white">
+                <h4 class="mb-0">
+                    <i class="bi <?php echo $success ? 'bi-check-circle-fill' : 'bi-exclamation-triangle-fill'; ?>"></i> 
+                    <?php echo $success ? 'บันทึกเอกสารสำเร็จ' : 'เกิดข้อผิดพลาด'; ?>
+                </h4>
+            </div>
+            <div class="card-body text-center">
+                <?php if ($success): ?>
+                    <div class="row justify-content-center">
+                        <div class="col-md-8">
+                            <!-- Image Preview -->
+                            <img src="<?php echo htmlspecialchars($file_path); ?>" class="img-fluid scan-preview" alt="Scanned Document">
+                            
+                            <!-- Information -->
+                            <div class="card mb-3 text-start">
+                                <div class="card-body">
+                                    <h5 class="card-title text-primary"><i class="bi bi-info-circle"></i> รายละเอียดเอกสาร</h5>
+                                    <p class="card-text mb-1"><strong>รหัสเอกสาร (Doc ID):</strong> <?php echo $doc_id; ?></p>
+                                    <p class="card-text mb-1"><strong>ชื่อเอกสาร:</strong> <?php echo htmlspecialchars($doc_name); ?></p>
+                                    <p class="card-text mb-0"><strong>วันที่สแกน:</strong> <?php echo htmlspecialchars($upload_time); ?></p>
+                                </div>
+                            </div>
+
+                            <!-- Action Buttons -->
+                            <div class="d-flex justify-content-center gap-2 no-print">
+                                <!--
+                                <a href="<?php echo htmlspecialchars($file_path); ?>" class="btn btn-primary" download>
+                                    <i class="bi bi-download"></i> ดาวน์โหลดรูปภาพ
+                                </a>
+                                <button onclick="window.print()" class="btn btn-secondary">
+                                    <i class="bi bi-printer"></i> พิมพ์เอกสาร
+                                </button>
+                                -->
+                                <a href="scan_form.php" class="btn btn-outline-success">
+                                    <i class="bi bi-plus-circle"></i> สแกนเพิ่ม
+                                </a>
+                                <a href="dashboard.php" class="btn btn-outline-dark">
+                                    <i class="bi bi-house"></i> กลับหน้าหลัก
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                <?php else: ?>
+                    <div class="alert alert-danger">
+                        <h5 class="alert-heading">การบันทึกเอกสารล้มเหลว</h5>
+                        <p><?php echo htmlspecialchars($error_msg); ?></p>
+                    </div>
+                    <div class="mt-3">
+                        <a href="scan_form.php" class="btn btn-primary">ลองใหม่อีกครั้ง</a>
+                        <a href="dashboard.php" class="btn btn-secondary">กลับหน้าหลัก</a>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

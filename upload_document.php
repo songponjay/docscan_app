@@ -36,8 +36,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['type_id'])) {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Bootstrap Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
-    <!-- Cropper.js CSS -->
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css" rel="stylesheet">
     <style>
         body { background-color: #f8f9fa; }
         .upload-area {
@@ -52,15 +50,44 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['type_id'])) {
             background-color: #f1f8ff;
         }
         .img-container {
-            max-height: 70vh;
+            position: relative;
+            width: 100%;
+            max-height: 80vh;
             background-color: #333;
             margin-bottom: 20px;
             border-radius: 5px;
             overflow: hidden;
+            touch-action: none; /* ป้องกันการเลื่อนหน้าจอขณะลากจุด */
+            display: flex;
+            justify-content: center;
+            align-items: center;
         }
         img {
             max-width: 100%;
+            max-height: 80vh;
             display: block;
+            user-select: none;
+        }
+        /* Handles for Perspective Crop */
+        .crop-handle {
+            position: absolute;
+            width: 24px;
+            height: 24px;
+            background-color: rgba(0, 255, 0, 0.8);
+            border: 2px solid white;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            cursor: move;
+            z-index: 10;
+        }
+        .crop-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 5;
         }
         /* Mobile Buttons */
         .mobile-btn {
@@ -148,9 +175,18 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['type_id'])) {
 
                     <!-- Step 2: Crop & Preview -->
                     <div id="step-crop">
-                        <h5 class="mb-3"><i class="bi bi-crop"></i> ปรับแต่งรูปภาพ</h5>
-                        <div class="img-container">
+                        <h5 class="mb-3"><i class="bi bi-crop"></i> ปรับแต่งรูปภาพ (ลาก 4 มุมให้ตรงกับเอกสาร)</h5>
+                        <div class="img-container" id="cropContainer">
                             <img id="image" src="" alt="Picture">
+                            <!-- SVG Overlay for lines -->
+                            <svg class="crop-overlay">
+                                <polygon id="cropPolygon" points="" style="fill: rgba(0, 255, 0, 0.2); stroke: #00ff00; stroke-width: 2;" />
+                            </svg>
+                            <!-- Handles -->
+                            <div class="crop-handle" id="tl"></div>
+                            <div class="crop-handle" id="tr"></div>
+                            <div class="crop-handle" id="br"></div>
+                            <div class="crop-handle" id="bl"></div>
                         </div>
                         
                         <div class="row g-2 mt-3">
@@ -179,7 +215,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['type_id'])) {
     </div>
 
     <!-- Scripts -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+    <!-- OpenCV.js for Perspective Transformation -->
+    <script async src="https://docs.opencv.org/4.8.0/opencv.js" onload="onOpenCvReady();" type="text/javascript"></script>
     <script>
         // Device Detection
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -200,7 +237,29 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['type_id'])) {
         const btnRetake = document.getElementById('btnRetake');
         const loading = document.getElementById('loading');
         
-        let cropper;
+        // Perspective Crop Variables
+        let openCvReady = false;
+        const handles = {
+            tl: document.getElementById('tl'),
+            tr: document.getElementById('tr'),
+            br: document.getElementById('br'),
+            bl: document.getElementById('bl')
+        };
+        const cropPolygon = document.getElementById('cropPolygon');
+        const cropContainer = document.getElementById('cropContainer');
+        
+        // Store normalized coordinates (0.0 to 1.0)
+        let points = {
+            tl: { x: 0.1, y: 0.1 },
+            tr: { x: 0.9, y: 0.1 },
+            br: { x: 0.9, y: 0.9 },
+            bl: { x: 0.1, y: 0.9 }
+        };
+
+        function onOpenCvReady() {
+            openCvReady = true;
+            console.log("OpenCV.js is ready");
+        }
 
         // Initial UI State
         if (isMobile) {
@@ -223,25 +282,109 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['type_id'])) {
                     stepCrop.style.display = 'block';
                     
                     image.src = url;
-
-                    // ถ้ามี Cropper เดิมอยู่ให้ทำลายก่อน
-                    if (cropper) {
-                        cropper.destroy();
-                    }
-
-                    // เริ่มต้น Cropper
-                    cropper = new Cropper(image, {
-                        aspectRatio: NaN, // อิสระ (Free crop)
-                        viewMode: 1,
-                        autoCropArea: 0.9,
-                        background: false,
-                    });
+                    
+                    // Initialize Crop UI after image loads
+                    image.onload = function() {
+                        initCropUI();
+                    };
                 }
             }
             // Reset inputs
             cameraInput.value = '';
             galleryInput.value = '';
         }
+
+        // Initialize Handles and Polygon
+        function initCropUI() {
+            // Reset points to default positions
+            points = {
+                tl: { x: 0.1, y: 0.1 },
+                tr: { x: 0.9, y: 0.1 },
+                br: { x: 0.9, y: 0.9 },
+                bl: { x: 0.1, y: 0.9 }
+            };
+            updateOverlay();
+        }
+
+        function updateOverlay() {
+            const rect = image.getBoundingClientRect();
+            const containerRect = cropContainer.getBoundingClientRect();
+            
+            // Calculate offset because image might be centered in container
+            const offsetX = rect.left - containerRect.left;
+            const offsetY = rect.top - containerRect.top;
+            
+            // Helper to convert normalized to pixel
+            const toPx = (pt) => ({
+                x: offsetX + pt.x * rect.width,
+                y: offsetY + pt.y * rect.height
+            });
+
+            const pPx = {
+                tl: toPx(points.tl),
+                tr: toPx(points.tr),
+                br: toPx(points.br),
+                bl: toPx(points.bl)
+            };
+
+            // Update Handles
+            for (const key in handles) {
+                handles[key].style.left = pPx[key].x + 'px';
+                handles[key].style.top = pPx[key].y + 'px';
+            }
+
+            // Update Polygon
+            const pts = `${pPx.tl.x},${pPx.tl.y} ${pPx.tr.x},${pPx.tr.y} ${pPx.br.x},${pPx.br.y} ${pPx.bl.x},${pPx.bl.y}`;
+            cropPolygon.setAttribute('points', pts);
+        }
+
+        // Handle Dragging
+        let activeHandle = null;
+
+        function handleStart(e) {
+            if (e.target.classList.contains('crop-handle')) {
+                e.preventDefault();
+                activeHandle = e.target.id;
+            }
+        }
+
+        function handleMove(e) {
+            if (!activeHandle) return;
+            e.preventDefault();
+
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+            const rect = image.getBoundingClientRect();
+            
+            // Calculate new normalized position relative to image
+            let x = (clientX - rect.left) / rect.width;
+            let y = (clientY - rect.top) / rect.height;
+
+            // Clamp to 0-1
+            x = Math.max(0, Math.min(1, x));
+            y = Math.max(0, Math.min(1, y));
+
+            points[activeHandle] = { x, y };
+            updateOverlay();
+        }
+
+        function handleEnd() {
+            activeHandle = null;
+        }
+
+        // Add listeners to container to catch moves outside handles
+        cropContainer.addEventListener('mousedown', handleStart);
+        cropContainer.addEventListener('touchstart', handleStart, { passive: false });
+        
+        window.addEventListener('mousemove', handleMove);
+        window.addEventListener('touchmove', handleMove, { passive: false });
+        
+        window.addEventListener('mouseup', handleEnd);
+        window.addEventListener('touchend', handleEnd);
+        
+        // Resize observer to update overlay on window resize
+        new ResizeObserver(updateOverlay).observe(image);
 
         // Event Listeners for Inputs
         cameraInput.addEventListener('change', (e) => handleFileSelect(e.target.files));
@@ -265,7 +408,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['type_id'])) {
 
         // Retake Button
         btnRetake.addEventListener('click', () => {
-            if (cropper) cropper.destroy();
+            // if (cropper) cropper.destroy();
             image.src = "";
             stepCrop.style.display = 'none';
             stepSelect.style.display = isMobile ? 'block' : 'block'; // Show parent container
@@ -278,25 +421,74 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['type_id'])) {
         uploadForm.addEventListener('submit', function (e) {
             if (!document.getElementById('doc_name').value) return; // Let HTML5 validation handle it
 
-            if (cropper) {
+            if (image.src && openCvReady) {
                 e.preventDefault(); // หยุดการส่งฟอร์มชั่วคราว
                 loading.style.display = 'flex';
                 
-                // แปลงส่วนที่ Crop เป็น Blob (ไฟล์)
-                cropper.getCroppedCanvas().toBlob((blob) => {
-                    // สร้าง File Object ใหม่จาก Blob
-                    const file = new File([blob], "scanned_doc.jpg", { type: "image/jpeg" });
+                // Perform Perspective Warp using OpenCV
+                try {
+                    let src = cv.imread(image);
+                    let dst = new cv.Mat();
                     
-                    // ใช้ DataTransfer เพื่อใส่ไฟล์เข้าไปใน input type="file" ที่ซ่อนอยู่
-                    const dataTransfer = new DataTransfer();
-                    dataTransfer.items.add(file);
-                    finalFile.files = dataTransfer.files;
+                    // Source points (scaled to natural image size)
+                    const w = src.cols;
+                    const h = src.rows;
+                    
+                    let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
+                        points.tl.x * w, points.tl.y * h,
+                        points.tr.x * w, points.tr.y * h,
+                        points.br.x * w, points.br.y * h,
+                        points.bl.x * w, points.bl.y * h
+                    ]);
 
-                    // ส่งฟอร์มจริงๆ
-                    uploadForm.submit();
-                }, 'image/jpeg', 0.85); // คุณภาพ JPEG 85%
+                    // Destination points (Rectangular)
+                    // Calculate width and height of the new document
+                    const widthTop = Math.hypot((points.tr.x - points.tl.x) * w, (points.tr.y - points.tl.y) * h);
+                    const widthBottom = Math.hypot((points.br.x - points.bl.x) * w, (points.br.y - points.bl.y) * h);
+                    const heightLeft = Math.hypot((points.bl.x - points.tl.x) * w, (points.bl.y - points.tl.y) * h);
+                    const heightRight = Math.hypot((points.br.x - points.tr.x) * w, (points.br.y - points.tr.y) * h);
+
+                    const maxWidth = Math.max(widthTop, widthBottom);
+                    const maxHeight = Math.max(heightLeft, heightRight);
+
+                    let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
+                        0, 0,
+                        maxWidth, 0,
+                        maxWidth, maxHeight,
+                        0, maxHeight
+                    ]);
+
+                    let dsize = new cv.Size(maxWidth, maxHeight);
+                    let M = cv.getPerspectiveTransform(srcTri, dstTri);
+                    
+                    // Warp
+                    cv.warpPerspective(src, dst, M, dsize, cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar());
+
+                    // Convert to Canvas to get Blob
+                    let canvas = document.createElement('canvas');
+                    cv.imshow(canvas, dst);
+                    
+                    canvas.toBlob((blob) => {
+                        const file = new File([blob], "scanned_doc.jpg", { type: "image/jpeg" });
+                        const dataTransfer = new DataTransfer();
+                        dataTransfer.items.add(file);
+                        finalFile.files = dataTransfer.files;
+                        
+                        // Cleanup
+                        src.delete(); dst.delete(); M.delete(); srcTri.delete(); dstTri.delete();
+                        
+                        uploadForm.submit();
+                    }, 'image/jpeg', 0.9);
+
+                } catch (err) {
+                    console.error(err);
+                    alert("เกิดข้อผิดพลาดในการประมวลผลภาพ: " + err);
+                    loading.style.display = 'none';
+                }
+            } else if (!openCvReady) {
+                alert("กำลังโหลดไลบรารีประมวลผลภาพ กรุณารอสักครู่...");
+                e.preventDefault();
             }
-            // ถ้าไม่ได้ใช้ Cropper (เช่นอัปโหลด PDF หรือไม่ได้เลือกรูป) ก็ให้ส่งตามปกติ
         });
     </script>
 </body>
