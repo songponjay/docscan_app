@@ -142,7 +142,7 @@ $recent_docs = $stmt->get_result();
                     </a>
                 </li>
                 <li>
-                    <a href="view_documents.php" class="nav-link">
+                    <a href="all_documents.php" class="nav-link">
                         <i class="fas fa-folder-open"></i> รายการเอกสารทั้งหมด
                     </a>
                 </li>
