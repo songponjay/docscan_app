@@ -32,10 +32,16 @@ $res_total = $stmt->get_result();
 $total_docs = $res_total->fetch_assoc()['count'];
 $stmt->close();
 
-// 2. รายการที่รอตรวจสอบ (สมมติ status_id = 1 คือ รอตรวจสอบ)
-$sql_pending = "SELECT COUNT(*) as count FROM document WHERE user_id = ? AND status_id = 1";
-$stmt = $conn->prepare($sql_pending);
-$stmt->bind_param("i", $user_id);
+// 2. รายการที่ยังไม่ดำเนินการ (status_id = 1)
+// ถ้าเป็น Admin ให้แสดงยอดรวมทั้งหมด เพื่อให้รู้ปริมาณงานที่เหลือ
+if ($is_admin) {
+    $sql_pending = "SELECT COUNT(*) as count FROM document WHERE status_id = 1";
+    $stmt = $conn->prepare($sql_pending);
+} else {
+    $sql_pending = "SELECT COUNT(*) as count FROM document WHERE user_id = ? AND status_id = 1";
+    $stmt = $conn->prepare($sql_pending);
+    $stmt->bind_param("i", $user_id);
+}
 $stmt->execute();
 $res_pending = $stmt->get_result();
 $pending_docs = $res_pending->fetch_assoc()['count'];
@@ -47,7 +53,7 @@ $res_types = $conn->query($sql_types);
 $total_types = $res_types->fetch_assoc()['count'];
 
 // --- ดึงรายการเอกสารล่าสุด 5 รายการ ---
-$sql_recent = "SELECT doc_name, doc_scandate FROM document WHERE user_id = ? ORDER BY doc_scandate DESC LIMIT 5";
+$sql_recent = "SELECT doc_name, doc_scandate, status_id FROM document WHERE user_id = ? ORDER BY doc_scandate DESC LIMIT 5";
 $stmt = $conn->prepare($sql_recent);
 $stmt->bind_param("i", $user_id);
 $stmt->execute();
@@ -156,7 +162,7 @@ $recent_docs = $stmt->get_result();
                 </li>
                 <li>
                     <a href="manage_status.php" class="nav-link">
-                        <i class="fas fa-tasks"></i> จัดการสถานะ
+                        <i class="fas fa-tasks"></i> อัปเดตสถานะเอกสาร
                     </a>
                 </li>
                 <?php endif; ?>
@@ -206,7 +212,7 @@ $recent_docs = $stmt->get_result();
                                     <i class="fas fa-clock"></i>
                                 </div>
                                 <div>
-                                    <h6 class="text-muted mb-1">รายการที่รอตรวจสอบ</h6>
+                                    <h6 class="text-muted mb-1">รายการที่ยังไม่ดำเนินการ</h6>
                                     <h3 class="mb-0 fw-bold"><?php echo number_format($pending_docs); ?></h3>
                                 </div>
                             </div>
@@ -239,17 +245,31 @@ $recent_docs = $stmt->get_result();
                                     <tr>
                                         <th class="ps-4">ชื่อเอกสาร</th>
                                         <th>วันที่สแกน</th>
+                                        <th>สถานะ</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     <?php if ($recent_docs->num_rows > 0): ?>
                                         <?php while($row = $recent_docs->fetch_assoc()): ?>
+                                        <?php 
+                                            // กำหนดสี Badge ตามสถานะ
+                                            $status_text = 'อื่นๆ';
+                                            $badge_class = 'bg-secondary';
+                                            if ($row['status_id'] == 1) {
+                                                $status_text = 'ยังไม่ดำเนินการ';
+                                                $badge_class = 'bg-warning text-dark';
+                                            } elseif ($row['status_id'] == 2) {
+                                                $status_text = 'ดำเนินการแล้ว';
+                                                $badge_class = 'bg-success';
+                                            }
+                                        ?>
                                         <tr>
                                             <td class="ps-4 fw-medium"><?php echo htmlspecialchars($row['doc_name']); ?></td>
                                             <td class="text-muted">
                                                 <i class="far fa-calendar-alt me-1"></i> 
                                                 <?php echo date("d/m/Y H:i", strtotime($row['doc_scandate'])); ?>
                                             </td>
+                                            <td><span class="badge <?php echo $badge_class; ?> rounded-pill"><?php echo $status_text; ?></span></td>
                                         </tr>
                                         <?php endwhile; ?>
                                     <?php else: ?>
