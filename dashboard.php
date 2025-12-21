@@ -131,7 +131,7 @@ $recent_docs = $stmt->get_result();
                     </a>
                 </li>
                 <li>
-                    <a href="scan_form.php" class="nav-link">
+                    <a href="smart_upload.php" class="nav-link">
                         <i class="fas fa-file-upload"></i> สแกนเอกสารใหม่
                     </a>
                 </li>
