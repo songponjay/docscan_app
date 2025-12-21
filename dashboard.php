@@ -161,11 +161,6 @@ $recent_docs = $stmt->get_result();
                         <i class="fas fa-users"></i> จัดการผู้ใช้
                     </a>
                 </li>
-                <li>
-                    <a href="manage_status.php" class="nav-link">
-                        <i class="fas fa-tasks"></i> อัปเดตสถานะเอกสาร
-                    </a>
-                </li>
                 <?php endif; ?>
             </ul>
         </div>

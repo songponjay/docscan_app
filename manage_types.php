@@ -124,56 +124,137 @@ $conn->close();
 <html lang="th">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>จัดการประเภทเอกสาร</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts: Sarabun -->
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Sarabun', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px 0;
+        }
+        .main-card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            background: white;
+            overflow: hidden;
+        }
+        .card-header {
+            background: white;
+            border-bottom: 1px solid #eee;
+            padding: 20px;
+        }
+        .table-hover tbody tr:hover {
+            background-color: #f8f9fa;
+        }
+    </style>
 </head>
 <body>
-    <h2>จัดการประเภทเอกสาร</h2>
-    <?php echo $message; ?>
-    <hr>
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-md-10 col-lg-8">
+                <div class="card main-card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h4 class="mb-0 fw-bold text-dark"><i class="fas fa-tags me-2 text-primary"></i>จัดการประเภทเอกสาร</h4>
+                        <a href="dashboard.php" class="btn btn-outline-secondary btn-sm rounded-pill"><i class="fas fa-arrow-left me-1"></i> กลับหน้าหลัก</a>
+                    </div>
+                    <div class="card-body p-4">
+                        
+                        <?php if (!empty($message)): ?>
+                            <div class="alert alert-light border shadow-sm mb-4" role="alert">
+                                <?php echo $message; ?>
+                            </div>
+                        <?php endif; ?>
 
-    <h3>เพิ่มประเภทเอกสารใหม่</h3>
-         <form method="post" action="<?php echo htmlspecialchars($_SERVER["PHP_SELF"]); ?>">
-         <label for="new_type_name">ชื่อประเภท:</label>
-        <input type="text" id="new_type_name" name="new_type_name" required>
-        <input type="submit" value="เพิ่ม">
-    </form>
-    <hr>
-    <h3>รายการประเภทเอกสารปัจจุบัน</h3>
-    <?php if (!empty($types)): ?>
-    <table border="1" cellpadding="5" cellspacing="0">
-        <tr>
-            <th>ID</th>
-            <th>ชื่อประเภทเอกสาร</th>
-            <th>Action</th> </tr>
-        <?php foreach ($types as $type): ?>
-        <tr>
-            <td><?php echo $type['type_id']; ?></td>
-            <?php if (isset($_GET['action']) && $_GET['action'] == 'edit' && isset($_GET['type_id']) && $_GET['type_id'] == $type['type_id']): ?>
-                <form method="post" action="manage_types.php" style="display:inline;">
-                    <td>
-                        <input type="text" name="edited_type_name" value="<?php echo htmlspecialchars($type['type_name']); ?>" required>
-                        <input type="hidden" name="edit_type_id" value="<?php echo $type['type_id']; ?>">
-                    </td>
-                    <td>
-                        <input type="submit" value="บันทึก">
-                        <a href="manage_types.php">ยกเลิก</a>
-                    </td>
-                </form>
-            <?php else: ?>
-                <td><?php echo htmlspecialchars($type['type_name']); ?></td>
-                <td>
-                    <a href="manage_types.php?action=edit&type_id=<?php echo $type['type_id']; ?>">แก้ไข</a> 
-                    | 
-                    <a href="manage_types.php?action=delete&type_id=<?php echo $type['type_id']; ?>" 
-                    onclick="return confirm('คุณแน่ใจหรือไม่ที่จะลบประเภท ID: <?php echo $type['type_id']; ?>?');">ลบ</a>
-                </td>
-            <?php endif; ?>
-        </tr>
-        <?php endforeach; ?>
-    </table>
-    <?php else: ?>
-    <p>ยังไม่มีประเภทเอกสารในฐานข้อมูล</p>
-    <?php endif; ?>
-    <p style="margin-top: 20px;"><a href="dashboard.php">กลับสู่หน้าหลัก</a></p>
+                        <!-- Add Form -->
+                        <div class="card bg-light border-0 mb-4">
+                            <div class="card-body">
+                                <h5 class="card-title mb-3"><i class="fas fa-plus-circle me-2"></i>เพิ่มประเภทใหม่</h5>
+                                <form method="post" action="<?php echo htmlspecialchars($_SERVER["PHP_SELF"]); ?>" class="row g-2 align-items-center">
+                                    <div class="col-md-9">
+                                        <div class="input-group">
+                                            <span class="input-group-text bg-white"><i class="fas fa-tag text-muted"></i></span>
+                                            <input type="text" class="form-control" id="new_type_name" name="new_type_name" placeholder="ระบุชื่อประเภทเอกสาร..." required>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <button type="submit" class="btn btn-primary w-100"><i class="fas fa-save me-1"></i> บันทึก</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+
+                        <!-- Table -->
+                        <h5 class="mb-3"><i class="fas fa-list me-2"></i>รายการประเภทเอกสาร</h5>
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="width: 10%;">ID</th>
+                                        <th>ชื่อประเภทเอกสาร</th>
+                                        <th style="width: 20%;" class="text-center">จัดการ</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php if (!empty($types)): ?>
+                                        <?php foreach ($types as $type): ?>
+                                        <tr>
+                                            <td><?php echo $type['type_id']; ?></td>
+                                            
+                                            <?php if (isset($_GET['action']) && $_GET['action'] == 'edit' && isset($_GET['type_id']) && $_GET['type_id'] == $type['type_id']): ?>
+                                                <!-- Edit Mode -->
+                                                <form method="post" action="manage_types.php">
+                                                    <td>
+                                                        <div class="input-group input-group-sm">
+                                                            <input type="text" class="form-control" name="edited_type_name" value="<?php echo htmlspecialchars($type['type_name']); ?>" required>
+                                                            <input type="hidden" name="edit_type_id" value="<?php echo $type['type_id']; ?>">
+                                                        </div>
+                                                    </td>
+                                                    <td class="text-center">
+                                                        <button type="submit" class="btn btn-sm btn-success me-1" title="บันทึก"><i class="fas fa-check"></i></button>
+                                                        <a href="manage_types.php" class="btn btn-sm btn-secondary" title="ยกเลิก"><i class="fas fa-times"></i></a>
+                                                    </td>
+                                                </form>
+                                            <?php else: ?>
+                                                <!-- View Mode -->
+                                                <td><?php echo htmlspecialchars($type['type_name']); ?></td>
+                                                <td class="text-center">
+                                                    <a href="manage_types.php?action=edit&type_id=<?php echo $type['type_id']; ?>" class="btn btn-sm btn-warning text-white me-1" title="แก้ไข">
+                                                        <i class="fas fa-edit"></i>
+                                                    </a>
+                                                    <a href="manage_types.php?action=delete&type_id=<?php echo $type['type_id']; ?>" 
+                                                       class="btn btn-sm btn-danger" 
+                                                       onclick="return confirm('คุณแน่ใจหรือไม่ที่จะลบประเภท ID: <?php echo $type['type_id']; ?>?');"
+                                                       title="ลบ">
+                                                        <i class="fas fa-trash-alt"></i>
+                                                    </a>
+                                                </td>
+                                            <?php endif; ?>
+                                        </tr>
+                                        <?php endforeach; ?>
+                                    <?php else: ?>
+                                        <tr>
+                                            <td colspan="3" class="text-center py-4 text-muted">ยังไม่มีข้อมูลประเภทเอกสาร</td>
+                                        </tr>
+                                    <?php endif; ?>
+                                </tbody>
+                            </table>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
