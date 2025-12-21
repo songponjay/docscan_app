@@ -7,6 +7,7 @@ if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) {
 }
 
 require_once 'db_connect.php';
+date_default_timezone_set('Asia/Bangkok');
 
 // ตั้งค่าโฟลเดอร์สำหรับเก็บไฟล์
 $upload_dir = 'uploads/';

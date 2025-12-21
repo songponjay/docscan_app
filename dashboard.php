@@ -2,6 +2,7 @@
 // เริ่ม Session ทุกครั้งที่ต้องการใช้ตัวแปร Session
 session_start();
 require_once 'db_connect.php';
+date_default_timezone_set('Asia/Bangkok');
 
 // ตรวจสอบว่าผู้ใช้ล็อกอินหรือไม่
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) {

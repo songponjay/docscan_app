@@ -14,18 +14,42 @@ $is_admin = (isset($_SESSION['status']) && $_SESSION['status'] == 2);
 $fullname = $_SESSION['name'] . (isset($_SESSION['surname']) ? ' ' . $_SESSION['surname'] : '');
 
 // --- ส่วนจัดการการอัปเดตสถานะ (สำหรับ Admin) ---
-if ($is_admin && $_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_status'])) {
-    $doc_id = intval($_POST['doc_id']);
-    $new_status = intval($_POST['status_id']);
-    
-    $stmt = $conn->prepare("UPDATE document SET status_id = ? WHERE doc_id = ?");
-    $stmt->bind_param("ii", $new_status, $doc_id);
-    $stmt->execute();
-    $stmt->close();
-    
-    // Redirect เพื่อป้องกันการส่งซ้ำ (PRG Pattern)
-    header("Location: all_documents.php?msg=updated");
-    exit;
+if ($is_admin) {
+    // 1. อัปเดตสถานะ
+    if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_status'])) {
+        $doc_id = intval($_POST['doc_id']);
+        $new_status = intval($_POST['status_id']);
+        
+        $stmt = $conn->prepare("UPDATE document SET status_id = ? WHERE doc_id = ?");
+        $stmt->bind_param("ii", $new_status, $doc_id);
+        $stmt->execute();
+        $stmt->close();
+        
+        header("Location: all_documents.php?msg=updated");
+        exit;
+    }
+
+    // 2. ลบเอกสาร
+    if (isset($_GET['delete_id'])) {
+        $delete_id = intval($_GET['delete_id']);
+        
+        // ดึง path ไฟล์เพื่อลบไฟล์จริง
+        $stmt = $conn->prepare("SELECT file_path FROM docfile WHERE doc_id = ?");
+        $stmt->bind_param("i", $delete_id);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        if ($row = $res->fetch_assoc()) {
+            if (file_exists($row['file_path'])) unlink($row['file_path']);
+        }
+        $stmt->close();
+
+        // ลบข้อมูลในฐานข้อมูล
+        $conn->query("DELETE FROM docfile WHERE doc_id = $delete_id");
+        $conn->query("DELETE FROM document WHERE doc_id = $delete_id");
+        
+        header("Location: all_documents.php?msg=deleted");
+        exit;
+    }
 }
 
 // --- ส่วนการค้นหาและกรองข้อมูล ---
@@ -57,13 +81,6 @@ if ($filter_type > 0) {
 if ($filter_status > 0) {
     $sql .= " AND d.status_id = ?";
     $params[] = $filter_status;
-    $types .= "i";
-}
-
-// ถ้าไม่ใช่ Admin ให้เห็นแค่ของตัวเอง
-if (!$is_admin) {
-    $sql .= " AND d.user_id = ?";
-    $params[] = $user_id;
     $types .= "i";
 }
 
@@ -139,6 +156,16 @@ $type_result = $conn->query("SELECT * FROM type ORDER BY type_name");
             <div class="container-fluid p-4">
                 <h3 class="mb-4 fw-bold text-dark">รายการเอกสารทั้งหมด</h3>
 
+                <?php if (isset($_GET['msg'])): ?>
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        <?php 
+                        if ($_GET['msg'] == 'updated') echo "อัปเดตสถานะเรียบร้อยแล้ว";
+                        if ($_GET['msg'] == 'deleted') echo "ลบเอกสารเรียบร้อยแล้ว";
+                        ?>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                <?php endif; ?>
+
                 <!-- Search & Filter -->
                 <div class="card mb-4 border-0 shadow-sm">
                     <div class="card-body">
@@ -208,9 +235,12 @@ $type_result = $conn->query("SELECT * FROM type ORDER BY type_name");
                                             </td>
                                             <?php if ($is_admin): ?>
                                             <td>
-                                                <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#statusModal" data-bs-id="<?php echo $row['doc_id']; ?>" data-bs-status="<?php echo $row['status_id']; ?>">
-                                                    <i class="fas fa-cog"></i> จัดการ
+                                                <button class="btn btn-sm btn-outline-secondary me-1" data-bs-toggle="modal" data-bs-target="#statusModal" data-bs-id="<?php echo $row['doc_id']; ?>" data-bs-status="<?php echo $row['status_id']; ?>" title="เปลี่ยนสถานะ">
+                                                    <i class="fas fa-cog"></i>
                                                 </button>
+                                                <a href="all_documents.php?delete_id=<?php echo $row['doc_id']; ?>" class="btn btn-sm btn-outline-danger" onclick="return confirm('ยืนยันการลบเอกสารนี้?');" title="ลบเอกสาร">
+                                                    <i class="fas fa-trash"></i>
+                                                </a>
                                             </td>
                                             <?php endif; ?>
                                         </tr>
