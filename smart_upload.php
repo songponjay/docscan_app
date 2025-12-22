@@ -373,7 +373,7 @@ $fullname = $_SESSION['name'] . (isset($_SESSION['surname']) ? ' ' . $_SESSION['
                 
                 // ใช้ setTimeout เพื่อให้ UI แสดง Loading ก่อนเริ่มประมวลผลหนัก
                 setTimeout(() => {
-                    let src = null, dst = null, M = null, srcTri = null, dstTri = null, kernel = null;
+                    let src = null, dst = null, gray = null, blurred = null, M = null, srcTri = null, dstTri = null, clahe = null;
                     try {
                         // 1. อ่านภาพต้นฉบับ (Full Resolution)
                         src = cv.imread(image);
@@ -406,22 +406,29 @@ $fullname = $_SESSION['name'] . (isset($_SESSION['surname']) ? ' ' . $_SESSION['
                             0, maxH
                         ]);
 
-                        // 3. ทำ Warp Perspective
+                        // 3. ทำ Warp Perspective (ใช้ INTER_LANCZOS4 เพื่อความคมชัดสูงสุด)
                         M = cv.getPerspectiveTransform(srcTri, dstTri);
-                        cv.warpPerspective(src, dst, M, new cv.Size(maxW, maxH), cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar());
+                        cv.warpPerspective(src, dst, M, new cv.Size(maxW, maxH), cv.INTER_LANCZOS4, cv.BORDER_CONSTANT, new cv.Scalar());
 
-                        // 4. ปรับปรุงคุณภาพภาพ (Image Enhancement)
-                        // 4.1 Sharpening (เพิ่มความคมชัด)
-                        kernel = cv.matFromArray(3, 3, cv.CV_32F, [-1, -1, -1, -1, 9, -1, -1, -1, -1]);
-                        cv.filter2D(dst, dst, -1, kernel, new cv.Point(-1, -1), 0, cv.BORDER_DEFAULT);
+                        // 4. Document Enhancement (Grayscale -> CLAHE -> Unsharp Mask -> Contrast)
+                        gray = new cv.Mat();
+                        cv.cvtColor(dst, gray, cv.COLOR_RGBA2GRAY);
 
-                        // 4.2 Brightness & Contrast (ปรับแสงและคอนทราสต์)
-                        // alpha = 1.1 (Contrast +10%), beta = 10 (Brightness +10)
-                        dst.convertTo(dst, -1, 1.1, 10);
+                        // 4.1 CLAHE (ปรับ Histogram แบบ Local เพื่อดึงรายละเอียดตัวอักษร)
+                        clahe = new cv.CLAHE(3.0, new cv.Size(8, 8));
+                        clahe.apply(gray, gray);
+
+                        // 4.2 Unsharp Masking (เพิ่มความคมชัดที่ขอบตัวอักษร)
+                        blurred = new cv.Mat();
+                        cv.GaussianBlur(gray, blurred, new cv.Size(0, 0), 3);
+                        cv.addWeighted(gray, 1.5, blurred, -0.5, 0, gray);
+
+                        // 4.3 Brightness & Contrast Adjustment
+                        gray.convertTo(gray, -1, 1.2, 10);
 
                         // 5. ส่งออกผลลัพธ์
                         let canvas = document.createElement('canvas');
-                        cv.imshow(canvas, dst);
+                        cv.imshow(canvas, gray);
                         
                         canvas.toBlob((blob) => {
                             const dt = new DataTransfer();
@@ -431,13 +438,15 @@ $fullname = $_SESSION['name'] . (isset($_SESSION['surname']) ? ' ' . $_SESSION['
                             // Cleanup Memory
                             if(src) src.delete(); 
                             if(dst) dst.delete(); 
+                            if(gray) gray.delete();
+                            if(blurred) blurred.delete();
+                            if(clahe) clahe.delete();
                             if(M) M.delete(); 
                             if(srcTri) srcTri.delete(); 
                             if(dstTri) dstTri.delete();
-                            if(kernel) kernel.delete();
                             
                             uploadForm.submit();
-                        }, 'image/jpeg', 0.9); // Quality 90%
+                        }, 'image/jpeg', 0.95); // Quality 95%
 
                     } catch (err) { 
                         console.error(err);
@@ -446,10 +455,12 @@ $fullname = $_SESSION['name'] . (isset($_SESSION['surname']) ? ' ' . $_SESSION['
                         // Cleanup on error
                         if(src) src.delete(); 
                         if(dst) dst.delete(); 
+                        if(gray) gray.delete();
+                        if(blurred) blurred.delete();
+                        if(clahe) clahe.delete();
                         if(M) M.delete(); 
                         if(srcTri) srcTri.delete(); 
                         if(dstTri) dstTri.delete();
-                        if(kernel) kernel.delete();
                     }
                 }, 100); // Delay เล็กน้อยเพื่อให้ UI อัปเดต
             } else if (!openCvReady) { alert("รอโหลดระบบประมวลผลภาพสักครู่..."); e.preventDefault(); }
