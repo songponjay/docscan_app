@@ -419,29 +419,36 @@ $fullname = $_SESSION['name'] . (isset($_SESSION['surname']) ? ' ' . $_SESSION['
                         M = cv.getPerspectiveTransform(srcTri, dstTri);
                         cv.warpPerspective(src, dst, M, new cv.Size(maxW, maxH), cv.INTER_LANCZOS4, cv.BORDER_CONSTANT, new cv.Scalar());
 
-                        // 5. Document Enhancement (Grayscale -> CLAHE -> Unsharp Mask -> Contrast)
-                        gray = new cv.Mat();
-                        cv.cvtColor(dst, gray, cv.COLOR_RGBA2GRAY);
+                        // 5. แก้ไข Bug 6935864: แปลงเป็น 3 Channel (RGB) เพื่อความเสถียร
+                        cv.cvtColor(dst, dst, cv.COLOR_RGBA2RGB, 0);
 
-                        // 5.1 CLAHE (ปรับ Histogram แบบ Local เพื่อดึงรายละเอียดตัวอักษร)
+                        // 6. Denoise: ใช้ Median Blur เพื่อลดลายสี่เหลี่ยม (Artifacts) อย่างมีประสิทธิภาพ
+                        cv.medianBlur(dst, dst, 3);
+
+                        // 7. Document Enhancement (Grayscale -> CLAHE -> Unsharp Mask -> Contrast)
+                        gray = new cv.Mat();
+                        // แปลงจากภาพ RGB ที่ผ่านการ Denoise แล้ว
+                        cv.cvtColor(dst, gray, cv.COLOR_RGB2GRAY);
+
+                        // 7.1 CLAHE (ปรับ Histogram แบบ Local เพื่อดึงรายละเอียดตัวอักษร)
                         clahe = new cv.CLAHE(3.0, new cv.Size(8, 8));
                         clahe.apply(gray, gray);
 
-                        // 5.2 Unsharp Masking (เพิ่มความคมชัดที่ขอบตัวอักษร)
+                        // 7.2 Unsharp Masking (เพิ่มความคมชัดที่ขอบตัวอักษร)
                         blurred = new cv.Mat();
                         cv.GaussianBlur(gray, blurred, new cv.Size(0, 0), 3);
                         cv.addWeighted(gray, 1.5, blurred, -0.5, 0, gray);
 
-                        // 5.3 Brightness & Contrast Adjustment
+                        // 7.3 Brightness & Contrast Adjustment
                         gray.convertTo(gray, -1, 1.2, 10);
 
-                        // 6. ส่งออกผลลัพธ์เป็นไฟล์คุณภาพสูงสุด
+                        // 8. ส่งออกผลลัพธ์เป็นไฟล์คุณภาพสูงสุด
                         let canvas = document.createElement('canvas');
                         cv.imshow(canvas, gray);
                         
                         canvas.toBlob((blob) => {
                             const dt = new DataTransfer();
-                            dt.items.add(new File([blob], "scanned_doc.jpg", { type: "image/jpeg" }));
+                            dt.items.add(new File([blob], "scanned_doc.png", { type: "image/png" }));
                             finalFile.files = dt.files;
                             
                             // Cleanup Memory
@@ -455,7 +462,7 @@ $fullname = $_SESSION['name'] . (isset($_SESSION['surname']) ? ' ' . $_SESSION['
                             if(dstTri) dstTri.delete();
                             
                             uploadForm.submit();
-                        }, 'image/jpeg', 1.0); // Quality 100%
+                        }, 'image/png'); // ใช้ PNG เพื่อป้องกันการเกิด Artifacts
 
                     } catch (err) { 
                         console.error(err);
