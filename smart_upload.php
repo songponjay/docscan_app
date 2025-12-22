@@ -257,6 +257,8 @@ $fullname = $_SESSION['name'] . (isset($_SESSION['surname']) ? ' ' . $_SESSION['
         let openCvReady = false;
         function onOpenCvReady() { openCvReady = true; }
 
+        let originalImage = new Image(); // Object สำหรับเก็บภาพความละเอียดเต็ม
+
         const stepSource = document.getElementById('step-source');
         const stepCrop = document.getElementById('step-crop');
         const image = document.getElementById('image');
@@ -287,10 +289,16 @@ $fullname = $_SESSION['name'] . (isset($_SESSION['surname']) ? ' ' . $_SESSION['
             if (files && files.length > 0) {
                 const file = files[0];
                 if (/^image\/\w+/.test(file.type)) {
-                    image.src = URL.createObjectURL(file);
-                    stepSource.style.display = 'none';
-                    stepCrop.style.display = 'block';
-                    image.onload = initCropUI;
+                    const url = URL.createObjectURL(file);
+                    // 1. โหลดภาพเข้า Object `originalImage` เพื่อให้ได้ขนาดจริง
+                    originalImage.src = url;
+                    originalImage.onload = () => {
+                        // 2. เมื่อโหลดเสร็จแล้ว จึงแสดงภาพ Preview บนหน้าจอ
+                        image.src = url; 
+                        stepSource.style.display = 'none';
+                        stepCrop.style.display = 'block';
+                        image.onload = initCropUI; // ตั้งค่า UI หลังจากภาพแสดงผล
+                    };
                 }
             }
             document.getElementById('cameraInput').value = '';
@@ -375,14 +383,15 @@ $fullname = $_SESSION['name'] . (isset($_SESSION['surname']) ? ' ' . $_SESSION['
                 setTimeout(() => {
                     let src = null, dst = null, gray = null, blurred = null, M = null, srcTri = null, dstTri = null, clahe = null;
                     try {
-                        // 1. อ่านภาพต้นฉบับ (Full Resolution)
-                        src = cv.imread(image);
+                        // 1. อ่านภาพต้นฉบับ (Full Resolution) จาก Object ที่โหลดไว้
+                        src = cv.imread(originalImage);
                         dst = new cv.Mat();
                         
-                        const w = src.cols;
-                        const h = src.rows;
+                        // 2. ใช้ naturalWidth/Height เพื่อความแม่นยำในการคำนวณพิกัด
+                        const w = originalImage.naturalWidth;
+                        const h = originalImage.naturalHeight;
 
-                        // 2. คำนวณพิกัด Perspective Transform
+                        // 3. คำนวณพิกัดจาก % ไปเป็น Pixel บนภาพจริง
                         srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
                             points.tl.x * w, points.tl.y * h,
                             points.tr.x * w, points.tr.y * h,
@@ -406,27 +415,27 @@ $fullname = $_SESSION['name'] . (isset($_SESSION['surname']) ? ' ' . $_SESSION['
                             0, maxH
                         ]);
 
-                        // 3. ทำ Warp Perspective (ใช้ INTER_LANCZOS4 เพื่อความคมชัดสูงสุด)
+                        // 4. ทำ Warp Perspective (ใช้ INTER_LANCZOS4 เพื่อความคมชัดสูงสุด)
                         M = cv.getPerspectiveTransform(srcTri, dstTri);
                         cv.warpPerspective(src, dst, M, new cv.Size(maxW, maxH), cv.INTER_LANCZOS4, cv.BORDER_CONSTANT, new cv.Scalar());
 
-                        // 4. Document Enhancement (Grayscale -> CLAHE -> Unsharp Mask -> Contrast)
+                        // 5. Document Enhancement (Grayscale -> CLAHE -> Unsharp Mask -> Contrast)
                         gray = new cv.Mat();
                         cv.cvtColor(dst, gray, cv.COLOR_RGBA2GRAY);
 
-                        // 4.1 CLAHE (ปรับ Histogram แบบ Local เพื่อดึงรายละเอียดตัวอักษร)
+                        // 5.1 CLAHE (ปรับ Histogram แบบ Local เพื่อดึงรายละเอียดตัวอักษร)
                         clahe = new cv.CLAHE(3.0, new cv.Size(8, 8));
                         clahe.apply(gray, gray);
 
-                        // 4.2 Unsharp Masking (เพิ่มความคมชัดที่ขอบตัวอักษร)
+                        // 5.2 Unsharp Masking (เพิ่มความคมชัดที่ขอบตัวอักษร)
                         blurred = new cv.Mat();
                         cv.GaussianBlur(gray, blurred, new cv.Size(0, 0), 3);
                         cv.addWeighted(gray, 1.5, blurred, -0.5, 0, gray);
 
-                        // 4.3 Brightness & Contrast Adjustment
+                        // 5.3 Brightness & Contrast Adjustment
                         gray.convertTo(gray, -1, 1.2, 10);
 
-                        // 5. ส่งออกผลลัพธ์
+                        // 6. ส่งออกผลลัพธ์เป็นไฟล์คุณภาพสูงสุด
                         let canvas = document.createElement('canvas');
                         cv.imshow(canvas, gray);
                         
@@ -446,7 +455,7 @@ $fullname = $_SESSION['name'] . (isset($_SESSION['surname']) ? ' ' . $_SESSION['
                             if(dstTri) dstTri.delete();
                             
                             uploadForm.submit();
-                        }, 'image/jpeg', 0.95); // Quality 95%
+                        }, 'image/jpeg', 1.0); // Quality 100%
 
                     } catch (err) { 
                         console.error(err);
