@@ -370,30 +370,88 @@ $fullname = $_SESSION['name'] . (isset($_SESSION['surname']) ? ' ' . $_SESSION['
             if (image.src && openCvReady) {
                 e.preventDefault();
                 loading.style.display = 'flex';
-                try {
-                    let src = cv.imread(image);
-                    let dst = new cv.Mat();
-                    const w = src.cols, h = src.rows;
-                    let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [points.tl.x*w, points.tl.y*h, points.tr.x*w, points.tr.y*h, points.br.x*w, points.br.y*h, points.bl.x*w, points.bl.y*h]);
-                    const wTop = Math.hypot((points.tr.x-points.tl.x)*w, (points.tr.y-points.tl.y)*h);
-                    const wBot = Math.hypot((points.br.x-points.bl.x)*w, (points.br.y-points.bl.y)*h);
-                    const hLeft = Math.hypot((points.bl.x-points.tl.x)*w, (points.bl.y-points.tl.y)*h);
-                    const hRight = Math.hypot((points.br.x-points.tr.x)*w, (points.br.y-points.tr.y)*h);
-                    const maxW = Math.max(wTop, wBot), maxH = Math.max(hLeft, hRight);
-                    let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [0,0, maxW,0, maxW,maxH, 0,maxH]);
-                    let M = cv.getPerspectiveTransform(srcTri, dstTri);
-                    cv.warpPerspective(src, dst, M, new cv.Size(maxW, maxH));
-                    
-                    let canvas = document.createElement('canvas');
-                    cv.imshow(canvas, dst);
-                    canvas.toBlob((blob) => {
-                        const dt = new DataTransfer();
-                        dt.items.add(new File([blob], "scanned.jpg", { type: "image/jpeg" }));
-                        finalFile.files = dt.files;
-                        src.delete(); dst.delete(); M.delete(); srcTri.delete(); dstTri.delete();
-                        uploadForm.submit();
-                    }, 'image/jpeg', 0.9);
-                } catch (err) { alert("Error: " + err); loading.style.display = 'none'; }
+                
+                // ใช้ setTimeout เพื่อให้ UI แสดง Loading ก่อนเริ่มประมวลผลหนัก
+                setTimeout(() => {
+                    let src = null, dst = null, M = null, srcTri = null, dstTri = null, kernel = null;
+                    try {
+                        // 1. อ่านภาพต้นฉบับ (Full Resolution)
+                        src = cv.imread(image);
+                        dst = new cv.Mat();
+                        
+                        const w = src.cols;
+                        const h = src.rows;
+
+                        // 2. คำนวณพิกัด Perspective Transform
+                        srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
+                            points.tl.x * w, points.tl.y * h,
+                            points.tr.x * w, points.tr.y * h,
+                            points.br.x * w, points.br.y * h,
+                            points.bl.x * w, points.bl.y * h
+                        ]);
+
+                        // คำนวณขนาดปลายทาง (Destination Size)
+                        const wTop = Math.hypot((points.tr.x - points.tl.x) * w, (points.tr.y - points.tl.y) * h);
+                        const wBot = Math.hypot((points.br.x - points.bl.x) * w, (points.br.y - points.bl.y) * h);
+                        const hLeft = Math.hypot((points.bl.x - points.tl.x) * w, (points.bl.y - points.tl.y) * h);
+                        const hRight = Math.hypot((points.br.x - points.tr.x) * w, (points.br.y - points.tr.y) * h);
+                        
+                        const maxW = Math.max(wTop, wBot);
+                        const maxH = Math.max(hLeft, hRight);
+
+                        dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
+                            0, 0,
+                            maxW, 0,
+                            maxW, maxH,
+                            0, maxH
+                        ]);
+
+                        // 3. ทำ Warp Perspective
+                        M = cv.getPerspectiveTransform(srcTri, dstTri);
+                        cv.warpPerspective(src, dst, M, new cv.Size(maxW, maxH), cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar());
+
+                        // 4. ปรับปรุงคุณภาพภาพ (Image Enhancement)
+                        // 4.1 Sharpening (เพิ่มความคมชัด)
+                        kernel = cv.matFromArray(3, 3, cv.CV_32F, [-1, -1, -1, -1, 9, -1, -1, -1, -1]);
+                        cv.filter2D(dst, dst, -1, kernel, new cv.Point(-1, -1), 0, cv.BORDER_DEFAULT);
+
+                        // 4.2 Brightness & Contrast (ปรับแสงและคอนทราสต์)
+                        // alpha = 1.1 (Contrast +10%), beta = 10 (Brightness +10)
+                        dst.convertTo(dst, -1, 1.1, 10);
+
+                        // 5. ส่งออกผลลัพธ์
+                        let canvas = document.createElement('canvas');
+                        cv.imshow(canvas, dst);
+                        
+                        canvas.toBlob((blob) => {
+                            const dt = new DataTransfer();
+                            dt.items.add(new File([blob], "scanned_doc.jpg", { type: "image/jpeg" }));
+                            finalFile.files = dt.files;
+                            
+                            // Cleanup Memory
+                            if(src) src.delete(); 
+                            if(dst) dst.delete(); 
+                            if(M) M.delete(); 
+                            if(srcTri) srcTri.delete(); 
+                            if(dstTri) dstTri.delete();
+                            if(kernel) kernel.delete();
+                            
+                            uploadForm.submit();
+                        }, 'image/jpeg', 0.9); // Quality 90%
+
+                    } catch (err) { 
+                        console.error(err);
+                        alert("เกิดข้อผิดพลาดในการประมวลผล: " + err); 
+                        loading.style.display = 'none';
+                        // Cleanup on error
+                        if(src) src.delete(); 
+                        if(dst) dst.delete(); 
+                        if(M) M.delete(); 
+                        if(srcTri) srcTri.delete(); 
+                        if(dstTri) dstTri.delete();
+                        if(kernel) kernel.delete();
+                    }
+                }, 100); // Delay เล็กน้อยเพื่อให้ UI อัปเดต
             } else if (!openCvReady) { alert("รอโหลดระบบประมวลผลภาพสักครู่..."); e.preventDefault(); }
         });
     </script>

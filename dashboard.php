@@ -78,9 +78,11 @@ $recent_docs = $stmt->get_result();
             background-color: #f4f6f9;
         }
         .sidebar {
-            min-height: 100vh;
-            background: #343a40;
+            background: #343a40 !important; /* บังคับใช้สีเข้มทับค่า Default ของ Bootstrap */
             color: #fff;
+        }
+        @media (min-width: 992px) {
+            .sidebar { min-height: 100vh; width: 280px; flex-shrink: 0; }
         }
         .sidebar .nav-link {
             color: rgba(255,255,255,.8);
@@ -123,10 +125,24 @@ $recent_docs = $stmt->get_result();
     </style>
 </head>
 <body>
+    <!-- Mobile Top Navbar (แสดงเฉพาะบนมือถือ/Tablet) -->
+    <nav class="navbar navbar-dark bg-dark d-lg-none p-3">
+        <div class="container-fluid">
+            <button class="navbar-toggler border-0" type="button" data-bs-toggle="offcanvas" data-bs-target="#sidebarMenu" aria-controls="sidebarMenu">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <a class="navbar-brand fw-bold" href="#"><i class="fas fa-file-signature me-2"></i>DocScan</a>
+        </div>
+    </nav>
+
     <div class="d-flex">
         <!-- Sidebar -->
-        <div class="sidebar d-flex flex-column flex-shrink-0 p-3" style="width: 280px;">
-            <a href="#" class="d-flex align-items-center mb-3 mb-md-0 me-md-auto text-white text-decoration-none">
+        <div class="sidebar offcanvas-lg offcanvas-start d-flex flex-column p-3 text-white" tabindex="-1" id="sidebarMenu" aria-labelledby="sidebarMenuLabel">
+            <div class="offcanvas-header d-lg-none">
+                <h5 class="offcanvas-title" id="sidebarMenuLabel">DocScan</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" data-bs-target="#sidebarMenu" aria-label="Close"></button>
+            </div>
+            <a href="#" class="d-none d-lg-flex align-items-center mb-3 mb-md-0 me-md-auto text-white text-decoration-none">
                 <i class="fas fa-file-signature fa-2x me-2"></i>
                 <span class="fs-4 fw-bold">DocScan</span>
             </a>
@@ -163,12 +179,24 @@ $recent_docs = $stmt->get_result();
                 </li>
                 <?php endif; ?>
             </ul>
+            
+            <!-- Mobile User Info & Logout (แสดงเฉพาะใน Sidebar บนมือถือ) -->
+            <div class="mt-auto d-lg-none pt-3 border-top border-secondary">
+                <div class="d-flex align-items-center mb-3 px-2">
+                    <div class="icon-box bg-secondary me-3" style="width: 40px; height: 40px; font-size: 1.2rem;"><i class="fas fa-user"></i></div>
+                    <div>
+                        <div class="fw-bold"><?php echo htmlspecialchars($fullname); ?></div>
+                        <small class="text-white-50"><?php echo $is_admin ? 'Admin' : 'User'; ?></small>
+                    </div>
+                </div>
+                <a href="logout.php" class="btn btn-danger w-100"><i class="fas fa-sign-out-alt me-2"></i>Logout</a>
+            </div>
         </div>
 
         <!-- Main Content -->
-        <div class="flex-grow-1 bg-light">
+        <div class="flex-grow-1 bg-light w-100">
             <!-- Top Navigation -->
-            <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm px-4 py-3">
+            <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm px-4 py-3 d-none d-lg-block">
                 <div class="container-fluid">
                     <span class="navbar-text ms-auto d-flex align-items-center">
                         <div class="me-3 text-end">
