@@ -189,7 +189,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                                     <i class="bi bi-printer"></i> พิมพ์เอกสาร
                                 </button>
                                 -->
-                                <a href="scan_form.php" class="btn btn-outline-success">
+                                <a href="smart_upload.php" class="btn btn-outline-success">
                                     <i class="bi bi-plus-circle"></i> สแกนเพิ่ม
                                 </a>
                                 <a href="dashboard.php" class="btn btn-outline-dark">

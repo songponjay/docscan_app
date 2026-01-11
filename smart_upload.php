@@ -381,7 +381,7 @@ $fullname = $_SESSION['name'] . (isset($_SESSION['surname']) ? ' ' . $_SESSION['
                 
                 // ใช้ setTimeout เพื่อให้ UI แสดง Loading ก่อนเริ่มประมวลผลหนัก
                 setTimeout(() => {
-                    let src = null, dst = null, gray = null, blurred = null, M = null, srcTri = null, dstTri = null, clahe = null;
+                    let src = null, dst = null, rgb = null, lab = null, planes = null, rgb_planes = null, L = null, a = null, b = null, blue = null, L_orig = null, bg = null, result = null, M = null, srcTri = null, dstTri = null;
                     try {
                         // 1. อ่านภาพต้นฉบับ (Full Resolution) จาก Object ที่โหลดไว้
                         src = cv.imread(originalImage);
@@ -419,32 +419,59 @@ $fullname = $_SESSION['name'] . (isset($_SESSION['surname']) ? ' ' . $_SESSION['
                         M = cv.getPerspectiveTransform(srcTri, dstTri);
                         cv.warpPerspective(src, dst, M, new cv.Size(maxW, maxH), cv.INTER_LANCZOS4, cv.BORDER_CONSTANT, new cv.Scalar());
 
-                        // 5. แก้ไข Bug 6935864: แปลงเป็น 3 Channel (RGB) เพื่อความเสถียร
-                        cv.cvtColor(dst, dst, cv.COLOR_RGBA2RGB, 0);
+                        // 4.1 Adaptive Scaling (Resize if too large to prevent crash/noise)
+                        let maxDim = Math.max(dst.cols, dst.rows);
+                        if (maxDim > 2000) {
+                            let scale = 2000 / maxDim;
+                            let newSize = new cv.Size(Math.round(dst.cols * scale), Math.round(dst.rows * scale));
+                            cv.resize(dst, dst, newSize, 0, 0, cv.INTER_AREA);
+                        }
 
-                        // 6. Denoise: ใช้ Median Blur เพื่อลดลายสี่เหลี่ยม (Artifacts) อย่างมีประสิทธิภาพ
-                        cv.medianBlur(dst, dst, 3);
+                        // 5. Convert to RGB (Work in Color Space)
+                        rgb = new cv.Mat();
+                        cv.cvtColor(dst, rgb, cv.COLOR_RGBA2RGB, 0);
 
-                        // 7. Document Enhancement (Grayscale -> CLAHE -> Unsharp Mask -> Contrast)
-                        gray = new cv.Mat();
-                        // แปลงจากภาพ RGB ที่ผ่านการ Denoise แล้ว
-                        cv.cvtColor(dst, gray, cv.COLOR_RGB2GRAY);
+                        // 6. Color Preservation (LAB Space)
+                        lab = new cv.Mat();
+                        cv.cvtColor(rgb, lab, cv.COLOR_RGB2Lab);
+                        planes = new cv.MatVector();
+                        cv.split(lab, planes);
+                        L = planes.get(0);
+                        a = planes.get(1);
+                        b = planes.get(2);
 
-                        // 7.1 CLAHE (ปรับ Histogram แบบ Local เพื่อดึงรายละเอียดตัวอักษร)
-                        clahe = new cv.CLAHE(3.0, new cv.Size(8, 8));
-                        clahe.apply(gray, gray);
+                        // Keep original L for Detail Recovery
+                        L_orig = L.clone();
 
-                        // 7.2 Unsharp Masking (เพิ่มความคมชัดที่ขอบตัวอักษร)
-                        blurred = new cv.Mat();
-                        cv.GaussianBlur(gray, blurred, new cv.Size(0, 0), 3);
-                        cv.addWeighted(gray, 1.5, blurred, -0.5, 0, gray);
+                        // 7. Yellow & Shadow Removal (Blue Channel Mask)
+                        // Extract Blue channel to help remove yellow stains (which are dark in Blue)
+                        rgb_planes = new cv.MatVector();
+                        cv.split(rgb, rgb_planes);
+                        blue = rgb_planes.get(2);
 
-                        // 7.3 Brightness & Contrast Adjustment
-                        gray.convertTo(gray, -1, 1.2, 10);
+                        // 8. Non-Destructive Background Flattening
+                        bg = new cv.Mat();
+                        // Use GaussianBlur (101) to estimate background from Blue channel
+                        cv.GaussianBlur(blue, bg, new cv.Size(101, 101), 0);
+                        // Normalize L channel using Blue background
+                        cv.divide(L, bg, L, 255, -1);
+
+                        // 9. Sharpening & Re-inking
+                        L.convertTo(L, -1, 1.25, -35);
+
+                        // 10. Final Detail Recovery (Blend 30% Original)
+                        cv.addWeighted(L, 0.7, L_orig, 0.3, 0, L);
+
+                        // 11. Merge & Convert back
+                        planes.set(0, L); planes.set(1, a); planes.set(2, b);
+                        cv.merge(planes, lab);
+                        
+                        result = new cv.Mat();
+                        cv.cvtColor(lab, result, cv.COLOR_Lab2RGB);
 
                         // 8. ส่งออกผลลัพธ์เป็นไฟล์คุณภาพสูงสุด
                         let canvas = document.createElement('canvas');
-                        cv.imshow(canvas, gray);
+                        cv.imshow(canvas, result);
                         
                         canvas.toBlob((blob) => {
                             const dt = new DataTransfer();
@@ -454,9 +481,17 @@ $fullname = $_SESSION['name'] . (isset($_SESSION['surname']) ? ' ' . $_SESSION['
                             // Cleanup Memory
                             if(src) src.delete(); 
                             if(dst) dst.delete(); 
-                            if(gray) gray.delete();
-                            if(blurred) blurred.delete();
-                            if(clahe) clahe.delete();
+                            if(rgb) rgb.delete();
+                            if(lab) lab.delete();
+                            if(planes) planes.delete();
+                            if(rgb_planes) rgb_planes.delete();
+                            if(L) L.delete();
+                            if(a) a.delete();
+                            if(b) b.delete();
+                            if(blue) blue.delete();
+                            if(L_orig) L_orig.delete();
+                            if(bg) bg.delete();
+                            if(result) result.delete();
                             if(M) M.delete(); 
                             if(srcTri) srcTri.delete(); 
                             if(dstTri) dstTri.delete();
@@ -471,9 +506,17 @@ $fullname = $_SESSION['name'] . (isset($_SESSION['surname']) ? ' ' . $_SESSION['
                         // Cleanup on error
                         if(src) src.delete(); 
                         if(dst) dst.delete(); 
-                        if(gray) gray.delete();
-                        if(blurred) blurred.delete();
-                        if(clahe) clahe.delete();
+                        if(rgb) rgb.delete();
+                        if(lab) lab.delete();
+                        if(planes) planes.delete();
+                        if(rgb_planes) rgb_planes.delete();
+                        if(L) L.delete();
+                        if(a) a.delete();
+                        if(b) b.delete();
+                        if(blue) blue.delete();
+                        if(L_orig) L_orig.delete();
+                        if(bg) bg.delete();
+                        if(result) result.delete();
                         if(M) M.delete(); 
                         if(srcTri) srcTri.delete(); 
                         if(dstTri) dstTri.delete();
