@@ -1,5 +1,6 @@
 <?php
 session_start();
+
 // ตรวจสอบ Login
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) {
     header("location: index.php");

@@ -35,12 +35,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     
     // --- ส่วนที่เพิ่ม: ดึงชื่อประเภทเพื่อใช้ตั้งชื่อโฟลเดอร์ (Requirement 1) ---
     $type_folder = 'uncategorized'; // ค่าเริ่มต้นกรณีหาไม่เจอ
-    $stmt_type = $conn->prepare("SELECT type_name FROM type WHERE type_id = ?");
+    $type_prefix = 'DOC';
+    $last_number = 0;
+    $stmt_type = $conn->prepare("SELECT type_name, type_prefix, last_number FROM type WHERE type_id = ?");
     $stmt_type->bind_param("i", $type_id);
     $stmt_type->execute();
     $res_type = $stmt_type->get_result();
     if ($row_type = $res_type->fetch_assoc()) {
         $type_folder = clean_folder_name($row_type['type_name']);
+        $type_prefix = !empty($row_type['type_prefix']) ? $row_type['type_prefix'] : 'DOC';
+        $last_number = intval($row_type['last_number']);
     }
     $stmt_type->close();
     // -------------------------------------------------------------------
@@ -80,7 +84,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
         // สร้างชื่อไฟล์ที่ไม่ซ้ำกัน
         $file_ext = pathinfo($file['name'], PATHINFO_EXTENSION);
-        $new_file_name = uniqid('doc_', true) . '.' . $file_ext;
+        
+        // --- Logic ตั้งชื่อไฟล์แบบ Running Number ---
+        $next_number = $last_number + 1;
+        $gen_file_name = $type_prefix . str_pad($next_number, 6, '0', STR_PAD_LEFT); // ชื่อไฟล์ระบบ เช่น A000001
+        $new_file_name = $gen_file_name . '.' . $file_ext;
         
         // --- ส่วนที่เพิ่ม: สร้างโฟลเดอร์และกำหนด Path ใหม่ (Requirement 2, 3) ---
         $target_dir = $upload_dir . $type_folder . '/';
@@ -105,7 +113,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         );
         $stmt_doc->bind_param(
             "siiiis", 
-            $doc_name,
+            $doc_name, // ใช้ชื่อที่ผู้ใช้พิมพ์ ($doc_name) เก็บลงตาราง document เพื่อให้อ่านเข้าใจง่าย
             $type_id, 
             $user_id,
             $status_id,
@@ -134,6 +142,22 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         
         if (!$stmt_file->execute()) {
             throw new Exception("Error saving file record: " . $stmt_file->error);
+        }
+
+        // --- ส่วนที่ 4: อัปเดต last_number ในตาราง type ---
+        $stmt_update_type = $conn->prepare("UPDATE type SET last_number = last_number + 1 WHERE type_id = ?");
+        $stmt_update_type->bind_param("i", $type_id);
+        if (!$stmt_update_type->execute()) {
+            // หากการอัปเดตตัวนับล้มเหลว ให้ Transaction ทำการ Rollback เพื่อป้องกันเลขกระโดด
+            throw new Exception("Error updating type counter: " . $stmt_update_type->error);
+        }
+
+        // --- ส่วนที่ 4: อัปเดต last_number ในตาราง type ---
+        $stmt_update_type = $conn->prepare("UPDATE type SET last_number = last_number + 1 WHERE type_id = ?");
+        $stmt_update_type->bind_param("i", $type_id);
+        if (!$stmt_update_type->execute()) {
+            // หากการอัปเดตตัวนับล้มเหลว ให้ Transaction ทำการ Rollback เพื่อป้องกันเลขกระโดด
+            throw new Exception("Error updating type counter: " . $stmt_update_type->error);
         }
 
         // ถ้าสำเร็จทั้งหมด: Commit Transaction

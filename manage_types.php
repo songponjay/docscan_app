@@ -44,12 +44,14 @@ $message = '';
 // ตรวจสอบการเพิ่มข้อมูลใหม่
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['new_type_name'])) {
     $new_type_name = trim($_POST['new_type_name']);
+    $type_prefix = isset($_POST['type_prefix']) ? trim($_POST['type_prefix']) : '';
+    $last_number = isset($_POST['last_number']) ? intval($_POST['last_number']) : 0;
     
     // ... โค้ดเดิมสำหรับเพิ่มประเภทเอกสาร (Create) ...
     if (!empty($new_type_name)) {
         // เตรียมคำสั่งเพิ่มประเภทเอกสารใหม่
-        $stmt = $conn->prepare("INSERT INTO type (type_name) VALUES (?)");
-        $stmt->bind_param("s", $new_type_name);
+        $stmt = $conn->prepare("INSERT INTO type (type_name, type_prefix, last_number) VALUES (?, ?, ?)");
+        $stmt->bind_param("ssi", $new_type_name, $type_prefix, $last_number);
         if ($stmt->execute()) {
             $message = "<p style='color:green;'>✅ เพิ่มประเภทเอกสาร: " . htmlspecialchars($new_type_name) . " สำเร็จ!</p>";
         } else {
@@ -87,10 +89,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['edit_type_id']) && iss
 // ... (โค้ด UPDATE ที่เหลือเหมือนเดิม) ...
     $edit_id = intval($_POST['edit_type_id']);
     $edited_name = trim($_POST['edited_type_name']);
+    $edited_prefix = trim($_POST['edited_type_prefix']);
+    $edited_last_number = intval($_POST['edited_last_number']);
+
     if (!empty($edited_name)) {
         // คำสั่ง UPDATE
-        $stmt = $conn->prepare("UPDATE type SET type_name = ? WHERE type_id = ?");
-        $stmt->bind_param("si", $edited_name, $edit_id);
+        $stmt = $conn->prepare("UPDATE type SET type_name = ?, type_prefix = ?, last_number = ? WHERE type_id = ?");
+        $stmt->bind_param("ssii", $edited_name, $edited_prefix, $edited_last_number, $edit_id);
         if ($stmt->execute()) {
              $message = "<p style='color:green;'>✅ แก้ไขประเภทเอกสาร (ID: {$edit_id}) สำเร็จ!</p>";
         } else {
@@ -110,7 +115,7 @@ if (isset($_GET['msg'])) {
 
 // ดึงรายการประเภทเอกสารทั้งหมดมาแสดง
 $types = [];
-$result = $conn->query("SELECT type_id, type_name FROM type ORDER BY type_id ASC");
+$result = $conn->query("SELECT type_id, type_name, type_prefix, last_number FROM type ORDER BY type_id ASC");
 if ($result->num_rows > 0) {
     while($row = $result->fetch_assoc()) {
         $types[] = $row;
@@ -178,10 +183,18 @@ $conn->close();
                             <div class="card-body">
                                 <h5 class="card-title mb-3"><i class="fas fa-plus-circle me-2"></i>เพิ่มประเภทใหม่</h5>
                                 <form method="post" action="<?php echo htmlspecialchars($_SERVER["PHP_SELF"]); ?>" class="row g-2 align-items-center">
-                                    <div class="col-md-9">
+                                    <div class="col-md-5">
                                         <div class="input-group">
                                             <span class="input-group-text bg-white"><i class="fas fa-tag text-muted"></i></span>
                                             <input type="text" class="form-control" id="new_type_name" name="new_type_name" placeholder="ระบุชื่อประเภทเอกสาร..." required>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <input type="text" class="form-control" name="type_prefix" placeholder="อักษรย่อ (เช่น INV)" maxlength="10">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <div class="input-group">
+                                            <input type="number" class="form-control" name="last_number" placeholder="เลขเริ่มต้น" value="0" min="0">
                                         </div>
                                     </div>
                                     <div class="col-md-3">
@@ -199,6 +212,8 @@ $conn->close();
                                     <tr>
                                         <th style="width: 10%;">ID</th>
                                         <th>ชื่อประเภทเอกสาร</th>
+                                        <th style="width: 15%;">อักษรย่อ</th>
+                                        <th style="width: 15%;">เลขล่าสุด</th>
                                         <th style="width: 20%;" class="text-center">จัดการ</th>
                                     </tr>
                                 </thead>
@@ -213,8 +228,14 @@ $conn->close();
                                                 <form method="post" action="manage_types.php">
                                                     <td>
                                                         <div class="input-group input-group-sm">
-                                                            <input type="text" class="form-control" name="edited_type_name" value="<?php echo htmlspecialchars($type['type_name']); ?>" required>
+                                                            <input type="text" class="form-control" name="edited_type_name" value="<?php echo htmlspecialchars($type['type_name']); ?>" required placeholder="ชื่อ">
                                                             <input type="hidden" name="edit_type_id" value="<?php echo $type['type_id']; ?>">
+                                                        </div>
+                                                    </td>
+                                                    <td><input type="text" class="form-control form-control-sm" name="edited_type_prefix" value="<?php echo htmlspecialchars($type['type_prefix']); ?>" placeholder="Prefix"></td>
+                                                    <td>
+                                                        <div class="input-group input-group-sm">
+                                                            <input type="number" class="form-control" name="edited_last_number" value="<?php echo $type['last_number']; ?>" min="0">
                                                         </div>
                                                     </td>
                                                     <td class="text-center">
@@ -225,6 +246,8 @@ $conn->close();
                                             <?php else: ?>
                                                 <!-- View Mode -->
                                                 <td><?php echo htmlspecialchars($type['type_name']); ?></td>
+                                                <td><span class="badge bg-light text-dark border"><?php echo htmlspecialchars($type['type_prefix'] ? $type['type_prefix'] : '-'); ?></span></td>
+                                                <td><?php echo number_format($type['last_number']); ?></td>
                                                 <td class="text-center">
                                                     <a href="manage_types.php?action=edit&type_id=<?php echo $type['type_id']; ?>" class="btn btn-sm btn-warning text-white me-1" title="แก้ไข">
                                                         <i class="fas fa-edit"></i>
