@@ -9,6 +9,13 @@ if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) {
 require_once 'db_connect.php';
 date_default_timezone_set('Asia/Bangkok');
 
+// ฟังก์ชันทำความสะอาดชื่อโฟลเดอร์ (Requirement 4)
+function clean_folder_name($name) {
+    $name = trim($name);
+    // เก็บตัวอักษร (รวมภาษาไทย), ตัวเลข และแทนที่อักขระพิเศษอื่นๆ ด้วย _
+    return preg_replace('/[^\p{L}\p{N}]/u', '_', $name);
+}
+
 // ตั้งค่าโฟลเดอร์สำหรับเก็บไฟล์
 $upload_dir = 'uploads/';
 // สร้างโฟลเดอร์อัตโนมัติถ้ายังไม่มี
@@ -25,6 +32,19 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     
     // ดึงข้อมูล Metadata จากฟอร์ม
     $type_id = intval($_POST['type_id']);
+    
+    // --- ส่วนที่เพิ่ม: ดึงชื่อประเภทเพื่อใช้ตั้งชื่อโฟลเดอร์ (Requirement 1) ---
+    $type_folder = 'uncategorized'; // ค่าเริ่มต้นกรณีหาไม่เจอ
+    $stmt_type = $conn->prepare("SELECT type_name FROM type WHERE type_id = ?");
+    $stmt_type->bind_param("i", $type_id);
+    $stmt_type->execute();
+    $res_type = $stmt_type->get_result();
+    if ($row_type = $res_type->fetch_assoc()) {
+        $type_folder = clean_folder_name($row_type['type_name']);
+    }
+    $stmt_type->close();
+    // -------------------------------------------------------------------
+
     $user_id = $_SESSION['user_id'];
     $doc_name = trim($_POST['doc_name']);
     $upload_time = date('Y-m-d H:i:s'); // เวลาปัจจุบัน
@@ -61,7 +81,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         // สร้างชื่อไฟล์ที่ไม่ซ้ำกัน
         $file_ext = pathinfo($file['name'], PATHINFO_EXTENSION);
         $new_file_name = uniqid('doc_', true) . '.' . $file_ext;
-        $destination = $upload_dir . $new_file_name;
+        
+        // --- ส่วนที่เพิ่ม: สร้างโฟลเดอร์และกำหนด Path ใหม่ (Requirement 2, 3) ---
+        $target_dir = $upload_dir . $type_folder . '/';
+        if (!file_exists($target_dir)) {
+            mkdir($target_dir, 0777, true);
+        }
+        $destination = $target_dir . $new_file_name;
         
         // อัปโหลดไฟล์จาก Temp ไปยังโฟลเดอร์ uploads/
         if (!move_uploaded_file($file_tmp_name, $destination)) {
@@ -126,6 +152,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
     $conn->close();
 }
+
+// URL-encode the file path for safe display in <img> src, especially for non-ASCII folder names
+if (isset($file_path)) {
+    $encoded_file_path = implode('/', array_map('rawurlencode', explode('/', $file_path)));
+}
 ?>
 
 <!DOCTYPE html>
@@ -167,7 +198,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     <div class="row justify-content-center">
                         <div class="col-md-8">
                             <!-- Image Preview -->
-                            <img src="<?php echo htmlspecialchars($file_path); ?>" class="img-fluid scan-preview" alt="Scanned Document">
+                            <img src="<?php echo isset($encoded_file_path) ? htmlspecialchars($encoded_file_path) : ''; ?>" class="img-fluid scan-preview" alt="Scanned Document">
                             
                             <!-- Information -->
                             <div class="card mb-3 text-start">

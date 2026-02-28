@@ -281,6 +281,27 @@ $type_result = $conn->query("SELECT * FROM type ORDER BY type_name");
                                 <tbody>
                                     <?php if ($result->num_rows > 0): ?>
                                         <?php while($row = $result->fetch_assoc()): ?>
+                                        <?php
+                                            // --- Logic to determine correct and safe image path (Requirement 1, 2, 3) ---
+                                            $db_path = $row['file_path'];
+                                            // กำหนดภาพ Placeholder กรณีไม่พบไฟล์ (คุณต้องสร้างไฟล์นี้ไว้ในระบบ)
+                                            $image_src = 'assets/img/placeholder.png'; 
+
+                                            // 1. ตรวจสอบ Path ที่ได้จากฐานข้อมูลก่อน
+                                            if (!empty($db_path) && file_exists($db_path)) {
+                                                $image_src = $db_path;
+                                            } 
+                                            // 2. หากไม่เจอ ให้ลองหาในโฟลเดอร์ uploads/ หลัก (สำหรับไฟล์เก่า)
+                                            else if (!empty($db_path)) {
+                                                $filename = basename($db_path);
+                                                $fallback_path = 'uploads/' . $filename;
+                                                if (file_exists($fallback_path)) {
+                                                    $image_src = $fallback_path;
+                                                }
+                                            }
+                                            // 3. Encode URL สำหรับ Path ที่มีชื่อภาษาไทย/อักขระพิเศษ
+                                            $encoded_image_src = implode('/', array_map('rawurlencode', explode('/', $image_src)));
+                                        ?>
                                         <tr>
                                             <td class="ps-4">#<?php echo $row['doc_id']; ?></td>
                                             <td class="fw-medium"><?php echo htmlspecialchars($row['doc_name']); ?></td>
@@ -294,7 +315,7 @@ $type_result = $conn->query("SELECT * FROM type ORDER BY type_name");
                                                 <?php endif; ?>
                                             </td>
                                             <td>
-                                                <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#imageModal" data-bs-src="<?php echo htmlspecialchars($row['file_path']); ?>">
+                                                <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#imageModal" data-bs-src="<?php echo htmlspecialchars($encoded_image_src); ?>">
                                                     <i class="fas fa-eye"></i> ดูภาพ
                                                 </button>
                                             </td>
