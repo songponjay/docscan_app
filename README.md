@@ -23,3 +23,27 @@ Language: PHP (Core/PDO)
 Database: MySQL / MariaDB
 
 Frontend: HTML, CSS, JavaScript (Bootstrap)
+
+
+ระบบจัดการเอกสารสแกนพร้อมระบบตั้งชื่อไฟล์อัตโนมัติ
+
+## วิธีการติดตั้ง (Installation)
+
+1. **ฐานข้อมูล**:
+   - นำไฟล์ SQL ในโฟลเดอร์ที่เตรียมไว้ไป Import เข้าที่ MySQL (phpMyAdmin)
+   - ตรวจสอบให้แน่ใจว่าได้สร้างฐานข้อมูลชื่อ `doc_scan_db`
+
+2. **การตั้งค่าฐานข้อมูล**:
+   - คัดลอกไฟล์ `db_connect.example.php` และเปลี่ยนชื่อเป็น `db_connect.php`
+   - แก้ไข Username และ Password ให้ตรงกับค่าในเครื่องของคุณ
+
+3. **โฟลเดอร์เก็บไฟล์**:
+   - สร้างโฟลเดอร์ชื่อ `uploads/` ไว้ในระดับเดียวกับไฟล์ index
+   - ตรวจสอบ Permission ให้สามารถเขียนไฟล์ลงไปได้ (Write Access)
+
+4. **การใช้งาน**:
+   - เข้าใช้งานผ่านเว็บเบราว์เซอร์ (เช่น `localhost/docscan_app`)
+   - User: `admin` / Password: `123` (ตามที่ตั้งไว้ใน SQL)
+
+## หมายเหตุ
+ไฟล์ `db_connect.php` และโฟลเดอร์ `uploads/` จะไม่ถูกนำขึ้น GitHub เพื่อความปลอดภัย
